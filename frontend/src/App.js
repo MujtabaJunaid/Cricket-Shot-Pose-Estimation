@@ -4,6 +4,7 @@ import ImagePredictor from './components/ImagePredictor';
 import VideoPredictor from './components/VideoPredictor';
 import LiveAnalytics from './components/LiveAnalytics';
 import ModelInfo from './components/ModelInfo';
+import { API_URL } from './config';
 
 function App() {
   const [activeTab, setActiveTab] = useState('image');
@@ -17,7 +18,7 @@ function App() {
 
   const checkApiStatus = async () => {
     try {
-      const response = await fetch('http://localhost:8000/health');
+      const response = await fetch(`${API_URL}/health`);
       if (response.ok) {
         setApiStatus('online');
       } else {
@@ -31,7 +32,7 @@ function App() {
 
   const fetchShotClasses = async () => {
     try {
-      const response = await fetch('http://localhost:8000/classes');
+      const response = await fetch(`${API_URL}/classes`);
       const data = await response.json();
       setShotClasses(data.shot_classes);
     } catch (error) {

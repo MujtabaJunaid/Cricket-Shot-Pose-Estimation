@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import '../styles/model-info.css';
+import { API_URL } from '../config';
 
 function ModelInfo() {
   const [modelInfo, setModelInfo] = useState(null);
@@ -14,7 +15,7 @@ function ModelInfo() {
 
   const fetchModelInfo = async () => {
     try {
-      const response = await fetch('http://localhost:8000/model/info');
+      const response = await fetch(`${API_URL}/model/info`);
       const data = await response.json();
       setModelInfo(data);
     } catch (err) {
@@ -24,7 +25,7 @@ function ModelInfo() {
 
   const fetchClasses = async () => {
     try {
-      const response = await fetch('http://localhost:8000/classes');
+      const response = await fetch(`${API_URL}/classes`);
       const data = await response.json();
       setClasses(data);
     } catch (err) {

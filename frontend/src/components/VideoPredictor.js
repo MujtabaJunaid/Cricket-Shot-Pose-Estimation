@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import '../styles/predictor.css';
+import { API_URL } from '../config';
 
 function VideoPredictor({ shotClasses }) {
   const [video, setVideo] = useState(null);
@@ -45,7 +46,7 @@ function VideoPredictor({ shotClasses }) {
     formData.append('file', video);
 
     try {
-      const response = await fetch('http://localhost:8000/predict/video', {
+      const response = await fetch(`${API_URL}/predict/video`, {
         method: 'POST',
         body: formData
       });

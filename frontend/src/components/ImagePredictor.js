@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import '../styles/predictor.css';
+import { API_URL } from '../config';
 
 function ImagePredictor({ shotClasses }) {
   const [image, setImage] = useState(null);
@@ -47,7 +48,7 @@ function ImagePredictor({ shotClasses }) {
     formData.append('file', image);
 
     try {
-      const response = await fetch('http://localhost:8000/predict/image', {
+      const response = await fetch(`${API_URL}/predict/image`, {
         method: 'POST',
         body: formData
       });
