@@ -6,11 +6,11 @@ import torch
 import numpy as np
 import argparse
 import logging
-from training.dataset import get_data_loaders, CricketPoseDataset, DataPreprocessor
+from training.dataset import get_data_loaders, CricketPoseDataset, DataPreprocessor, HuggingFaceDataset
 from training.train import ModelTrainer
 from training.export import ModelExporter
 from backend.models.classifier import PoseClassifier, StaticPoseClassifier, EnsembleClassifier
-from backend.config import BATCH_SIZE, EPOCHS, LEARNING_RATE, VALIDATION_SPLIT, SHOT_CLASSES
+from backend.config import BATCH_SIZE, EPOCHS, LEARNING_RATE, VALIDATION_SPLIT, SHOT_CLASSES, REVERSE_SHOT_CLASSES
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -25,6 +25,8 @@ def main():
     parser.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu', help='Device to use')
     parser.add_argument('--mode', choices=['train', 'export', 'preprocess'], default='train')
     parser.add_argument('--export-format', choices=['onnx', 'torchscript', 'quantized', 'ensemble'], default='ensemble')
+    parser.add_argument('--use-huggingface', action='store_true', help='Use HuggingFace dataset')
+    parser.add_argument('--dataset-name', default='rokmr/cricket-shot', help='HuggingFace dataset name')
     
     args = parser.parse_args()
     
@@ -40,20 +42,37 @@ def main():
         logger.info("Starting training...")
         
         try:
-            train_loader, val_loader, dataset = get_data_loaders(
-                args.data_dir,
-                SHOT_CLASSES,
-                batch_size=args.batch_size,
-                validation_split=VALIDATION_SPLIT
-            )
+            if args.use_huggingface:
+                logger.info(f"Loading HuggingFace dataset: {args.dataset_name}")
+                train_loader, val_loader, dataset = get_data_loaders(
+                    label_mapping=REVERSE_SHOT_CLASSES,
+                    batch_size=args.batch_size,
+                    validation_split=VALIDATION_SPLIT,
+                    use_huggingface=True,
+                    dataset_name=args.dataset_name
+                )
+            else:
+                logger.info(f"Loading local data from: {args.data_dir}")
+                train_loader, val_loader, dataset = get_data_loaders(
+                    data_dir=args.data_dir,
+                    label_mapping=SHOT_CLASSES,
+                    batch_size=args.batch_size,
+                    validation_split=VALIDATION_SPLIT,
+                    use_huggingface=False
+                )
         except Exception as e:
             logger.error(f"Error loading data: {e}")
-            logger.info("Creating sample data structure...")
-            Path(args.data_dir).mkdir(parents=True, exist_ok=True)
-            for shot_class in SHOT_CLASSES.values():
-                (Path(args.data_dir) / shot_class).mkdir(exist_ok=True)
-            logger.info("Please add training data to data/processed/{shot_class}/ directories")
-            return
+            if not args.use_huggingface:
+                logger.info("Creating sample data structure...")
+                Path(args.data_dir).mkdir(parents=True, exist_ok=True)
+                for shot_class in SHOT_CLASSES.values():
+                    (Path(args.data_dir) / shot_class).mkdir(exist_ok=True)
+                logger.info("Please add training data to data/processed/{shot_class}/ directories")
+                return
+            else:
+                logger.error("Failed to load HuggingFace dataset. Ensure 'datasets' package is installed.")
+                logger.error("Install with: pip install datasets")
+                return
         
         num_classes = len(SHOT_CLASSES)
         input_size = 99

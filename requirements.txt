@@ -13,3 +13,6 @@ python-multipart==0.0.6
 pydantic==2.5.0
 tqdm==4.66.1
 scipy==1.11.4
+datasets==2.16.0
+huggingface-hub==0.20.0
+

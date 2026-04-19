@@ -22,6 +22,8 @@ SHOT_CLASSES = {
     8: "lofted_shot"
 }
 
+REVERSE_SHOT_CLASSES = {v: k for k, v in SHOT_CLASSES.items()}
+
 POSE_LANDMARKS_COUNT = 33
 FEATURES_SIZE = 33 * 3
 
@@ -38,3 +40,8 @@ FRAME_SKIP = 2
 FPS_TARGET = 30
 
 DEVICE = "cuda" if os.environ.get("DEVICE", "cuda") else "cpu"
+
+HUGGINGFACE_DATASET = "rokmr/cricket-shot"
+USE_HUGGINGFACE = os.environ.get("USE_HUGGINGFACE", "false").lower() == "true"
+HUGGINGFACE_CACHE_DIR = BASE_DIR / "hf_cache"
+
