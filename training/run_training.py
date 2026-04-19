@@ -6,11 +6,11 @@ import torch
 import numpy as np
 import argparse
 import logging
-from training.dataset import get_data_loaders, CricketPoseDataset, DataPreprocessor, HuggingFaceDataset
+from training.dataset import create_dataloaders, CricketPoseDataset, SHOT_CLASSES
 from training.train import ModelTrainer
 from training.export import ModelExporter
 from backend.models.classifier import PoseClassifier, StaticPoseClassifier, EnsembleClassifier
-from backend.config import BATCH_SIZE, EPOCHS, LEARNING_RATE, VALIDATION_SPLIT, SHOT_CLASSES, REVERSE_SHOT_CLASSES
+from backend.config import BATCH_SIZE, EPOCHS, LEARNING_RATE
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -23,56 +23,33 @@ def main():
     parser.add_argument('--batch-size', type=int, default=BATCH_SIZE, help='Batch size')
     parser.add_argument('--learning-rate', type=float, default=LEARNING_RATE, help='Learning rate')
     parser.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu', help='Device to use')
-    parser.add_argument('--mode', choices=['train', 'export', 'preprocess'], default='train')
+    parser.add_argument('--mode', choices=['train', 'export'], default='train')
     parser.add_argument('--export-format', choices=['onnx', 'torchscript', 'quantized', 'ensemble'], default='ensemble')
-    parser.add_argument('--use-huggingface', action='store_true', help='Use HuggingFace dataset')
-    parser.add_argument('--dataset-name', default='rokmr/cricket-shot', help='HuggingFace dataset name')
     
     args = parser.parse_args()
     
     device = args.device
     logger.info(f"Using device: {device}")
     
-    if args.mode == 'preprocess':
-        logger.info("Preprocessing data...")
-        preprocessor = DataPreprocessor('data/raw', args.data_dir)
-        logger.info(f"Preprocessor ready at {args.data_dir}")
-    
-    elif args.mode == 'train':
+    if args.mode == 'train':
         logger.info("Starting training...")
         
         try:
-            if args.use_huggingface:
-                logger.info(f"Loading HuggingFace dataset: {args.dataset_name}")
-                train_loader, val_loader, dataset = get_data_loaders(
-                    label_mapping=REVERSE_SHOT_CLASSES,
-                    batch_size=args.batch_size,
-                    validation_split=VALIDATION_SPLIT,
-                    use_huggingface=True,
-                    dataset_name=args.dataset_name
-                )
-            else:
-                logger.info(f"Loading local data from: {args.data_dir}")
-                train_loader, val_loader, dataset = get_data_loaders(
-                    data_dir=args.data_dir,
-                    label_mapping=SHOT_CLASSES,
-                    batch_size=args.batch_size,
-                    validation_split=VALIDATION_SPLIT,
-                    use_huggingface=False
-                )
+            logger.info(f"Loading local data from: {args.data_dir}")
+            train_loader, val_loader, dataset = create_dataloaders(
+                data_dir=args.data_dir,
+                batch_size=args.batch_size,
+                num_workers=0
+            )
         except Exception as e:
             logger.error(f"Error loading data: {e}")
-            if not args.use_huggingface:
-                logger.info("Creating sample data structure...")
-                Path(args.data_dir).mkdir(parents=True, exist_ok=True)
-                for shot_class in SHOT_CLASSES.values():
-                    (Path(args.data_dir) / shot_class).mkdir(exist_ok=True)
-                logger.info("Please add training data to data/processed/{shot_class}/ directories")
-                return
-            else:
-                logger.error("Failed to load HuggingFace dataset. Ensure 'datasets' package is installed.")
-                logger.error("Install with: pip install datasets")
-                return
+            logger.info("Creating data directory structure...")
+            Path(args.data_dir).mkdir(parents=True, exist_ok=True)
+            for shot_class in SHOT_CLASSES.keys():
+                (Path(args.data_dir) / shot_class).mkdir(exist_ok=True)
+            logger.info(f"Please add training data to {args.data_dir}/{{class_name}}/ directories")
+            logger.info("Run: python process_local_dataset.py --dataset-dir <path> --output-dir " + args.data_dir)
+            return
         
         num_classes = len(SHOT_CLASSES)
         input_size = 99

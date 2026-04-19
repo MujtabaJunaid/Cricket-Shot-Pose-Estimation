@@ -1,6 +1,11 @@
 import torch
-import onnx
-import onnxruntime as ort
+try:
+    import onnx
+    import onnxruntime as ort
+    ONNX_AVAILABLE = True
+except ImportError:
+    ONNX_AVAILABLE = False
+    logger_msg = "ONNX not available - skipping ONNX export"
 import numpy as np
 from pathlib import Path
 import json
@@ -13,6 +18,10 @@ class ModelExporter:
     
     @staticmethod
     def export_to_onnx(model, model_path: str, output_path: str, input_shape: tuple = (1, 10, 99)):
+        if not ONNX_AVAILABLE:
+            logger.warning("ONNX not available - skipping ONNX export")
+            return
+        
         device = next(model.parameters()).device
         model.eval()
         
@@ -70,6 +79,10 @@ class ModelExporter:
 
     @staticmethod
     def verify_onnx_model(onnx_path: str, test_input: np.ndarray):
+        if not ONNX_AVAILABLE:
+            logger.warning("ONNX not available - skipping ONNX verification")
+            return None
+        
         session = ort.InferenceSession(onnx_path)
         input_name = session.get_inputs()[0].name
         output_name = session.get_outputs()[0].name

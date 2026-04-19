@@ -1,7 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.tensorboard import SummaryWriter
+try:
+    from torch.utils.tensorboard import SummaryWriter
+except ImportError:
+    SummaryWriter = None
 from pathlib import Path
 import json
 import logging
@@ -36,8 +39,14 @@ class ModelTrainer:
 
             optimizer.zero_grad()
             
-            if inputs.dim() == 2:
-                outputs = self.model(inputs)
+            # Handle both 2D and 3D inputs
+            if inputs.dim() == 3:
+                # For static model with temporal data, take mean across time
+                if hasattr(self.model, 'lstm1'):  # Temporal model
+                    outputs = self.model(inputs)
+                else:  # Static model
+                    inputs = torch.mean(inputs, dim=1)  # Average across time
+                    outputs = self.model(inputs)
             else:
                 outputs = self.model(inputs)
             
@@ -68,8 +77,14 @@ class ModelTrainer:
             for inputs, targets in tqdm(val_loader, desc="Validation"):
                 inputs, targets = inputs.to(self.device), targets.to(self.device)
                 
-                if inputs.dim() == 2:
-                    outputs = self.model(inputs)
+                # Handle both 2D and 3D inputs
+                if inputs.dim() == 3:
+                    # For static model with temporal data, take mean across time
+                    if hasattr(self.model, 'lstm1'):  # Temporal model
+                        outputs = self.model(inputs)
+                    else:  # Static model
+                        inputs = torch.mean(inputs, dim=1)  # Average across time
+                        outputs = self.model(inputs)
                 else:
                     outputs = self.model(inputs)
                 
@@ -92,7 +107,7 @@ class ModelTrainer:
         
         criterion = nn.CrossEntropyLoss()
         optimizer = optim.AdamW(self.model.parameters(), lr=learning_rate, weight_decay=1e-5)
-        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=3, verbose=True)
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=3)
         
         patience_counter = 0
         
