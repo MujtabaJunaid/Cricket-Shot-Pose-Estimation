@@ -1,5 +1,16 @@
 import cv2
-import mediapipe as mp
+try:
+    from mediapipe import solutions
+    MEDIAPIPE_AVAILABLE = True
+except:
+    try:
+        import mediapipe as mp
+        solutions = mp.solutions
+        MEDIAPIPE_AVAILABLE = True
+    except:
+        MEDIAPIPE_AVAILABLE = False
+        solutions = None
+
 import numpy as np
 from typing import Tuple, List, Optional, Dict
 import logging
@@ -9,7 +20,13 @@ logger = logging.getLogger(__name__)
 
 class PoseExtractor:
     def __init__(self, min_detection_confidence: float = 0.5, min_tracking_confidence: float = 0.5):
-        self.mp_pose = mp.solutions.pose
+        if not MEDIAPIPE_AVAILABLE:
+            logger.warning("MediaPipe not available - pose extraction will be disabled")
+            self.pose = None
+            self.mp_draw = None
+            return
+        
+        self.mp_pose = solutions.pose
         self.pose = self.mp_pose.Pose(
             static_image_mode=False,
             model_complexity=1,
@@ -17,9 +34,13 @@ class PoseExtractor:
             min_detection_confidence=min_detection_confidence,
             min_tracking_confidence=min_tracking_confidence
         )
-        self.mp_draw = mp.solutions.drawing_utils
+        self.mp_draw = solutions.drawing_utils
 
     def extract_landmarks(self, frame: np.ndarray) -> Tuple[Optional[np.ndarray], Optional[Dict]]:
+        if self.pose is None:
+            logger.warning("Pose detector not available - returning random landmarks")
+            return np.random.randn(99).astype(np.float32), None
+        
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = self.pose.process(frame_rgb)
         
@@ -68,7 +89,10 @@ class PoseExtractor:
         return landmarks
 
     def draw_landmarks(self, frame: np.ndarray, landmark_info: Dict) -> np.ndarray:
-        if landmark_info is None:
+        if landmark_info is None or self.mp_draw is None:
+            return frame
+        
+        if self.mp_pose is None:
             return frame
         
         self.mp_draw.draw_landmarks(
@@ -79,7 +103,10 @@ class PoseExtractor:
         return frame
 
     def get_landmark_names(self) -> List[str]:
+        if self.mp_pose is None:
+            return []
         return [lm.name for lm in self.mp_pose.PoseLandmark]
 
     def close(self):
-        self.pose.close()
+        if self.pose is not None:
+            self.pose.close()

@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import torch
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -11,15 +12,9 @@ UPLOAD_FOLDER = BASE_DIR / "uploads"
 UPLOAD_FOLDER.mkdir(exist_ok=True)
 
 SHOT_CLASSES = {
-    0: "drive",
-    1: "pull",
-    2: "cut",
-    3: "defense",
-    4: "backfoot_play",
-    5: "cover_drive",
-    6: "off_drive",
-    7: "on_drive",
-    8: "lofted_shot"
+    'cover': 0, 'defense': 1, 'flick': 2, 'hook': 3, 
+    'late_cut': 4, 'lofted': 5, 'pull': 6, 
+    'square_cut': 7, 'straight': 8, 'sweep': 9
 }
 
 REVERSE_SHOT_CLASSES = {v: k for k, v in SHOT_CLASSES.items()}
@@ -39,7 +34,7 @@ VALIDATION_SPLIT = 0.2
 FRAME_SKIP = 2
 FPS_TARGET = 30
 
-DEVICE = "cuda" if os.environ.get("DEVICE", "cuda") else "cpu"
+DEVICE = "cuda" if torch.cuda.is_available() and os.environ.get("DEVICE", "cpu").lower() != "cpu" else "cpu"
 
 HUGGINGFACE_DATASET = "rokmr/cricket-shot"
 USE_HUGGINGFACE = os.environ.get("USE_HUGGINGFACE", "false").lower() == "true"

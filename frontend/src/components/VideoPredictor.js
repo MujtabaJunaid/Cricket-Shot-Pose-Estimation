@@ -129,7 +129,7 @@ function VideoPredictor({ shotClasses }) {
           <div className="result-item">
             <h3>Dominant Shot Classification</h3>
             <p style={{ fontSize: '24px', fontWeight: 'bold', color: '#667eea' }}>
-              {result.predicted_shot?.toUpperCase() || result.dominant_shot?.toUpperCase()}
+              {(result.shot_class || 'UNKNOWN').toUpperCase()}
             </p>
             <p>Average Confidence: {(result.average_confidence * 100 || result.confidence * 100).toFixed(2)}%</p>
             <div className="confidence-bar">
@@ -149,7 +149,7 @@ function VideoPredictor({ shotClasses }) {
           <div className="result-item">
             <h3>All Predictions</h3>
             <ul className="predictions-list">
-              {result.all_predictions && Object.entries(result.all_predictions).map(([shot, probability]) => (
+              {(result.probabilities || {}) && Object.entries(result.probabilities || {}).map(([shot, probability]) => (
                 <li key={shot}>
                   <span>{shot}</span>
                   <span>{(probability * 100).toFixed(1)}%</span>

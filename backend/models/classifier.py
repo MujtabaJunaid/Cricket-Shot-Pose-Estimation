@@ -6,7 +6,7 @@ from pathlib import Path
 import pickle
 
 class PoseClassifier(nn.Module):
-    def __init__(self, num_classes: int = 9, input_size: int = 99):
+    def __init__(self, num_classes: int = 10, input_size: int = 99):
         super(PoseClassifier, self).__init__()
         
         self.lstm1 = nn.LSTM(input_size, 256, batch_first=True, dropout=0.3)
@@ -44,7 +44,7 @@ class PoseClassifier(nn.Module):
 
 
 class StaticPoseClassifier(nn.Module):
-    def __init__(self, num_classes: int = 9, input_size: int = 99):
+    def __init__(self, num_classes: int = 10, input_size: int = 99):
         super(StaticPoseClassifier, self).__init__()
         
         self.fc1 = nn.Linear(input_size, 256)
@@ -70,7 +70,7 @@ class StaticPoseClassifier(nn.Module):
 
 
 class EnsembleClassifier:
-    def __init__(self, num_classes: int = 9, device: str = "cpu"):
+    def __init__(self, num_classes: int = 10, device: str = "cpu"):
         self.num_classes = num_classes
         self.device = device
         
@@ -81,22 +81,49 @@ class EnsembleClassifier:
         self.temporal_scaler = None
 
     def forward(self, landmarks: np.ndarray) -> tuple:
+        """Forward pass for ensemble prediction.
+        
+        Args:
+            landmarks: np.ndarray of shape (99,) for single frame or (seq_len, 99) for sequences
+            
+        Returns:
+            (prediction, confidence, probabilities)
+        """
+        # Ensure models are in eval mode
+        self.temporal_model.eval()
+        self.static_model.eval()
+        
         landmarks_tensor = torch.FloatTensor(landmarks).to(self.device)
         
+        # Handle single landmark (1D)
         if landmarks_tensor.dim() == 1:
-            landmarks_tensor = landmarks_tensor.unsqueeze(0)
+            landmarks_tensor = landmarks_tensor.unsqueeze(0)  # (1, 99)
         
-        with torch.no_grad():
-            static_out = self.static_model(landmarks_tensor)
-            temporal_out = self.temporal_model(landmarks_tensor.unsqueeze(1))
-        
-        ensemble_out = (static_out + temporal_out) / 2
-        
-        probabilities = F.softmax(ensemble_out, dim=1).cpu().numpy()
-        prediction = np.argmax(probabilities[0])
-        confidence = probabilities[0][prediction]
-        
-        return prediction, confidence, probabilities[0]
+        try:
+            with torch.no_grad():
+                # For static model: input is (batch, features)
+                static_out = self.static_model(landmarks_tensor)
+                
+                # For temporal model: input is (batch, seq_len, features)
+                # If we have single frame, repeat it to create a sequence
+                if landmarks_tensor.shape[0] == 1 and landmarks_tensor.dim() == 2:
+                    # Single frame case - create a sequence of repeated frames
+                    temporal_input = landmarks_tensor.unsqueeze(1).repeat(1, 10, 1)  # (1, 10, 99)
+                else:
+                    # Sequence case
+                    temporal_input = landmarks_tensor.unsqueeze(1) if landmarks_tensor.dim() == 2 else landmarks_tensor
+                
+                temporal_out = self.temporal_model(temporal_input)
+            
+            ensemble_out = (static_out + temporal_out) / 2
+            
+            probabilities = F.softmax(ensemble_out, dim=1).cpu().numpy()
+            prediction = np.argmax(probabilities[0])
+            confidence = probabilities[0][prediction]
+            
+            return prediction, confidence, probabilities[0]
+        except Exception as e:
+            raise RuntimeError(f"Error in classifier forward pass: {type(e).__name__}: {e}")
 
     def save_checkpoint(self, path: str):
         Path(path).parent.mkdir(parents=True, exist_ok=True)

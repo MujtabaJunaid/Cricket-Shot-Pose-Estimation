@@ -14,7 +14,7 @@ from typing import List, Dict
 from backend.config import (
     UPLOAD_FOLDER, MODEL_PATH, SHOT_CLASSES, ALLOWED_VIDEO_EXTENSIONS,
     ALLOWED_IMAGE_EXTENSIONS, MAX_UPLOAD_SIZE, DEVICE, POSE_CONFIDENCE_THRESHOLD,
-    POSE_TRACKING_CONFIDENCE
+    POSE_TRACKING_CONFIDENCE, REVERSE_SHOT_CLASSES
 )
 from backend.utils.pose_extractor import PoseExtractor
 from backend.utils.shot_analyzer import ShotAnalyzer
@@ -48,12 +48,44 @@ async def startup():
     
     classifier = EnsembleClassifier(num_classes=len(SHOT_CLASSES), device=DEVICE)
     
-    checkpoint = MODEL_PATH / "best_model.pt"
-    if checkpoint.exists():
-        classifier.load_checkpoint(str(checkpoint))
-        logger.info("Model loaded successfully")
+    # Try to load trained models
+    temporal_checkpoint = MODEL_PATH / "temporal_model.pt"
+    static_checkpoint = MODEL_PATH / "static_model.pt"
+    ensemble_checkpoint = MODEL_PATH / "best_model.pt"
+    
+    if temporal_checkpoint.exists() and static_checkpoint.exists():
+        try:
+            # Load individual model checkpoints (saved by ModelTrainer with 'model_state' key)
+            temporal_data = torch.load(str(temporal_checkpoint), map_location=DEVICE)
+            static_data = torch.load(str(static_checkpoint), map_location=DEVICE)
+            
+            if isinstance(temporal_data, dict) and 'model_state' in temporal_data:
+                classifier.temporal_model.load_state_dict(temporal_data['model_state'])
+            else:
+                classifier.temporal_model.load_state_dict(temporal_data)
+                
+            if isinstance(static_data, dict) and 'model_state' in static_data:
+                classifier.static_model.load_state_dict(static_data['model_state'])
+            else:
+                classifier.static_model.load_state_dict(static_data)
+            
+            classifier.temporal_model.eval()
+            classifier.static_model.eval()
+            logger.info("Temporal and static models loaded successfully")
+        except Exception as e:
+            logger.warning(f"Failed to load individual models: {e}")
+    elif ensemble_checkpoint.exists():
+        try:
+            checkpoint_data = torch.load(str(ensemble_checkpoint), map_location=DEVICE)
+            if isinstance(checkpoint_data, dict) and 'temporal_state' in checkpoint_data:
+                classifier.load_checkpoint(str(ensemble_checkpoint))
+                logger.info("Ensemble model loaded successfully")
+            else:
+                logger.warning("Checkpoint format not recognized. Using untrained models.")
+        except Exception as e:
+            logger.warning(f"Failed to load ensemble model: {e}")
     else:
-        logger.warning("No trained model found. Model inference will use untrained weights.")
+        logger.warning("No trained models found. Model inference will use untrained weights.")
 
 @app.on_event("shutdown")
 async def shutdown():
@@ -90,7 +122,9 @@ async def predict_image(file: UploadFile = File(...)):
         if frame is None:
             raise HTTPException(status_code=400, detail="Invalid image")
         
+        logger.debug(f"Image decoded: shape={frame.shape}")
         landmarks, landmark_info = pose_extractor.extract_landmarks(frame)
+        logger.debug(f"Landmarks extracted: shape={landmarks.shape if landmarks is not None else 'None'}")
         
         if landmarks is None:
             return {
@@ -99,22 +133,26 @@ async def predict_image(file: UploadFile = File(...)):
                 "pose_found": False
             }
         
+        logger.debug(f"Normalizing landmarks...")
         normalized_landmarks = ShotAnalyzer.normalize_landmarks(landmarks)
+        logger.debug(f"Normalized landmarks: shape={normalized_landmarks.shape}")
         
+        logger.debug(f"Running prediction...")
         with torch.no_grad():
             prediction, confidence, probabilities = classifier.forward(normalized_landmarks)
+        logger.debug(f"Prediction complete: {prediction}, confidence={confidence}")
         
-        shot_class = SHOT_CLASSES.get(int(prediction), "unknown")
+        shot_class = REVERSE_SHOT_CLASSES.get(int(prediction), "unknown")
         
         angle_features = ShotAnalyzer.extract_angle_features(landmarks)
         
         return {
             "success": True,
             "pose_found": True,
-            "predicted_shot": shot_class,
+            "shot_class": shot_class,
             "confidence": float(confidence),
-            "all_predictions": {
-                SHOT_CLASSES[i]: float(probabilities[i])
+            "probabilities": {
+                REVERSE_SHOT_CLASSES[i]: float(probabilities[i])
                 for i in range(len(SHOT_CLASSES))
             },
             "angle_features": {
@@ -128,8 +166,10 @@ async def predict_image(file: UploadFile = File(...)):
         }
     
     except Exception as e:
-        logger.error(f"Error processing image: {e}")
-        raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
+        logger.error(f"Error processing image: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Error processing image: {type(e).__name__}: {str(e)}")
 
 @app.post("/predict/video")
 async def predict_video(file: UploadFile = File(...)):
