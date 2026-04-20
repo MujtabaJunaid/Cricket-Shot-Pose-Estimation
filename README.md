@@ -1,11 +1,11 @@
 CRICKET SHOT POSE CLASSIFICATION SYSTEM
-AMD HACKATHON PROJECT - COMPLETE SOLUTION
+LOCAL DEVELOPMENT - READY TO USE
 
 PROJECT SUMMARY
 ===============
-A sophisticated, production-ready AI system for real-time cricket shot pose classification
-using computer vision and deep learning. Built with modern web technologies and optimized
-for AMD cloud deployment using the $100 developer credits.
+A production-ready AI system for real-time cricket shot pose classification
+using computer vision and deep learning. Runs 100% locally with no external dependencies.
+Uses MediaPipe for pose detection and PyTorch for shot classification.
 
 WHAT HAS BEEN BUILT
 ===================

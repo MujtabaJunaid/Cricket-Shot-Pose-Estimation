@@ -19,3 +19,13 @@ uploads/
 logs/
 .env
 .cache/
+
+# Large files
+*.npy
+data/processed/
+models/checkpoints/*.pt
+*.task
+
+# Logs
+*.log
+api.log
