@@ -3,6 +3,7 @@ import numpy as np
 from typing import Tuple, List, Optional, Dict
 import logging
 from pathlib import Path
+import os
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -10,6 +11,7 @@ logger = logging.getLogger(__name__)
 # Try to import MediaPipe
 MEDIAPIPE_AVAILABLE = False
 POSE_MODEL_PATH = Path(__file__).parent.parent / "models" / "pose_landmarker.tflite"
+POSE_MODEL_TASK = Path(__file__).parent.parent / "models" / "pose_landmarker_lite.task"
 
 try:
     # MediaPipe 0.10+ uses new tasks API
@@ -22,6 +24,22 @@ except ImportError as e:
     logger.warning(f"MediaPipe not available: {e}")
     MEDIAPIPE_AVAILABLE = False
 
+def _download_pose_model():
+    """Download pose model from Google Storage."""
+    import urllib.request
+    
+    url = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite.tflite"
+    POSE_MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+    
+    try:
+        logger.info(f"Downloading pose model to {POSE_MODEL_PATH}...")
+        urllib.request.urlretrieve(url, str(POSE_MODEL_PATH))
+        logger.info(f"✓ Downloaded pose model ({POSE_MODEL_PATH.stat().st_size / (1024*1024):.1f} MB)")
+        return True
+    except Exception as e:
+        logger.warning(f"Could not download model: {e}")
+        return False
+
 class PoseExtractor:
     def __init__(self, min_detection_confidence: float = 0.5, min_tracking_confidence: float = 0.5):
         self.pose_detector = None
@@ -32,19 +50,25 @@ class PoseExtractor:
             self.using_fallback = True
             return
         
-        # Check if model exists
-        if not POSE_MODEL_PATH.exists():
-            logger.warning(f"⚠ Pose model not found at {POSE_MODEL_PATH}")
-            logger.info("  To enable real pose detection, download from:")
-            logger.info("  https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite.tflite")
-            logger.info("  And save to: backend/models/pose_landmarker.tflite")
-            logger.info("  Using random landmarks for now...")
-            self.using_fallback = True
-            return
+        # Ensure model exists
+        model_path = None
+        if POSE_MODEL_TASK.exists():
+            model_path = POSE_MODEL_TASK
+            logger.info(f"Found .task model: {model_path}")
+        elif POSE_MODEL_PATH.exists():
+            model_path = POSE_MODEL_PATH
+            logger.info(f"Found .tflite model: {model_path}")
+        else:
+            logger.info("Model not found, attempting download...")
+            if not _download_pose_model():
+                logger.warning("Could not download model, using fallback")
+                self.using_fallback = True
+                return
+            model_path = POSE_MODEL_PATH
         
         try:
-            # Initialize with the downloaded model
-            base_options = BaseOptions(model_asset_path=str(POSE_MODEL_PATH))
+            # Initialize with the model
+            base_options = BaseOptions(model_asset_path=str(model_path))
             options = PoseLandmarkerOptions(
                 base_options=base_options,
                 output_segmentation_masks=False
@@ -53,7 +77,7 @@ class PoseExtractor:
             logger.info("✓ MediaPipe PoseLandmarker initialized successfully")
         except Exception as e:
             logger.warning(f"Could not initialize MediaPipe: {e}")
-            logger.info("Using random landmarks...")
+            logger.info("Using random landmarks as fallback...")
             self.using_fallback = True
             self.pose_detector = None
 
