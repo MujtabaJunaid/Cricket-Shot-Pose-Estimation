@@ -59,8 +59,8 @@ class VideoProcessor:
             detection_result = self.pose_detector.detect(mp_image)
             
             # Extract landmarks
-            if detection_result.landmarks:
-                landmarks = detection_result.landmarks[0]
+            if detection_result.pose_landmarks:
+                landmarks = detection_result.pose_landmarks[0]
                 pose_array = []
                 
                 for landmark in landmarks:
